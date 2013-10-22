@@ -1,7 +1,7 @@
 check_load_auto_cpu
 ===================
 
-cpu load can be meaningless.  more so when it's not even related to the number of cores you have.  this fixes the latter, godspeed on the former
+cpu load can be meaningless --  more so when it's not even related to the number of cores you have.  this tries to address the latter. your mileage may vary on the former.
 
     usage: check_load_auto_cpu [-h] [-v] [-t [TIME]] [-c CRITICAL] [-w WARNING]
                                [-d]

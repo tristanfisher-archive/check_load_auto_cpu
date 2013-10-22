@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+
+__author__ = 'tristan@tristanfisher.com'
+
+import argparse
+import multiprocessing #no need for psutil to just count CPUs
+import os
+import sys
+
+VERSION='0.01'
+def show_version(): print(VERSION)
+
+class Nagios:
+	ok          = (0, 'OK')
+	warning     = (1, 'WARNING')
+	critical    = (2, 'CRITICAL')
+	unknown     = (3, 'UNKNOWN')
+
+nagios = Nagios()
+
+class Cpu(object):
+	""" bind cpu stats to a python object  """
+	def __init__(self):
+		self.cpu1m  = os.getloadavg()[0]
+		self.cpu5m  = os.getloadavg()[1]
+		self.cpu15m = os.getloadavg()[2]
+		self.cpuNum = multiprocessing.cpu_count()
+
+cpu = Cpu()
+
+def nagiosExit(exit_code,debug=None,msg=None):
+	"""Exit script with a str() message and an integer 'nagios_code', which is a sys.exit level."""
+	#if debug == True: print(exit_code[0],exit_code[1] + " - " + str(msg))
+	print(exit_code[0],exit_code[1] + " - " + str(msg))
+	sys.exit(exit_code[0])
+
+def main(time_interval=5,warning_threshold=None,critical_threshold=None,debug=None):
+	try:
+		cpu_datapoint = getattr(cpu, "cpu{0}m".format(time_interval))
+
+		#divide the load by the number of available CPUs:
+		cpu_datapoint = (cpu_datapoint / cpu.cpuNum)
+
+		#In the following, we're actually alerting on the rounded value.
+		#If this ruins anyone's day, make a pull req or tell me to fix it...
+		cpu_datapoint = round(cpu_datapoint,2)
+		#and pad the output to always 2 significant digits (in case of 1.2)...
+		cpu_datapoint = "%.2f"%cpu_datapoint
+
+		#TODO :: dry this up with a generalized check for warning || critical
+		if critical_threshold is not None and cpu_datapoint >= critical_threshold:
+			nagiosExit(nagios.critical,
+					   str("load : {0} ; threshold : {1} ").format(cpu_datapoint, critical_threshold), debug)
+
+		if warning_threshold is not None and cpu_datapoint >= warning_threshold:
+			nagiosExit(nagios.warning,
+					   str("load : {0} ; threshold : {1}").format(cpu_datapoint, warning_threshold), debug)
+
+		else:
+			nagiosExit(nagios.ok, str("load : {0}"), debug)
+
+	except AttributeError:
+		sys.exit('Please specify an interval of 1, 5, or 15 minutes')
+
+if __name__ == "__main__":
+
+	# subclass to display help on errors...
+	class HelpfulParser(argparse.ArgumentParser):
+		def error(self, message):
+			sys.stderr.write('Something went wrong... {0}\n'.format(message))
+			self.print_help()
+			sys.exit(2)
+
+	parser = HelpfulParser(description=str("A Nagios-ready python script for giving"
+										   " system load as an average over the number"
+										   "of CPUs in your machine."
+	))
+	parser.add_argument('-v', '--version', action="store_true",
+						help='Show script version and exit')
+	parser.add_argument('-t', '--time', type=int, nargs='?', default=5,
+						help='Specify which interval you want (1,5,15 minute) (default: 5)')
+	parser.add_argument('-c', '--critical',
+						help='The integer on which you want to alert critical')
+	parser.add_argument('-w', '--warning',
+						help='The integer on which you want to start warning')
+	parser.add_argument('-d', '--debug', default=True, action="store_true",
+						help='Debugging -- Output the alert details')
+	args = parser.parse_args()
+
+	if args.version:
+		show_version()
+		sys.exit(0)
+	if args.time:
+		main(time_interval=args.time, warning_threshold=args.warning,
+        critical_threshold=args.critical,debug=args.debug)
+		sys.exit(0)
+	else:
+		parser.print_help()
